@@ -1,0 +1,11 @@
+# Dados: as letras têm direitos autorais e os índices são grandes.
+# Cada pessoa do grupo baixa e gera localmente (veja o README).
+data/
+
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+.pytest_cache/
+.streamlit/secrets.toml
+.vscode/
+.idea/

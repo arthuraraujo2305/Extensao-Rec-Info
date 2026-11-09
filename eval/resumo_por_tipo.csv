@@ -1,0 +1,33 @@
+tipo,configuracao,MRR,sucesso@1,sucesso@10,ndcg@10
+trecho exato,Booleano (AND),0.723,0.635,0.89,0.765
+trecho com erros,Booleano (AND),0.0,0.0,0.0,0.0
+palavras soltas,Booleano (AND),0.813,0.76,0.915,0.832
+artista + trecho,Booleano (AND),0.901,0.85,0.985,0.899
+trecho exato,Booleano + correção,0.715,0.625,0.885,0.757
+trecho com erros,Booleano + correção,0.502,0.44,0.615,0.53
+palavras soltas,Booleano + correção,0.803,0.75,0.905,0.822
+artista + trecho,Booleano + correção,0.891,0.84,0.975,0.889
+trecho exato,TF-IDF,0.682,0.605,0.855,0.723
+trecho com erros,TF-IDF,0.387,0.285,0.625,0.44
+palavras soltas,TF-IDF,0.754,0.67,0.9,0.787
+artista + trecho,TF-IDF,0.63,0.515,0.885,0.681
+trecho exato,BM25,0.877,0.84,0.95,0.895
+trecho com erros,BM25,0.655,0.585,0.815,0.693
+palavras soltas,BM25,0.922,0.885,0.985,0.933
+artista + trecho,BM25,0.936,0.905,0.985,0.933
+trecho exato,BM25 + correção,0.877,0.84,0.95,0.895
+trecho com erros,BM25 + correção,0.804,0.75,0.93,0.834
+palavras soltas,BM25 + correção,0.922,0.885,0.985,0.933
+artista + trecho,BM25 + correção,0.932,0.9,0.985,0.931
+trecho exato,Semântico,0.243,0.19,0.345,0.264
+trecho com erros,Semântico,0.084,0.06,0.15,0.097
+palavras soltas,Semântico,0.163,0.12,0.27,0.184
+artista + trecho,Semântico,0.058,0.04,0.1,0.067
+trecho exato,Híbrido RRF + correção,0.536,0.43,0.845,0.604
+trecho com erros,Híbrido RRF + correção,0.476,0.36,0.81,0.553
+palavras soltas,Híbrido RRF + correção,0.489,0.345,0.865,0.575
+artista + trecho,Híbrido RRF + correção,0.406,0.21,0.915,0.516
+trecho exato,Híbrido CombSUM + correção,0.872,0.83,0.95,0.891
+trecho com erros,Híbrido CombSUM + correção,0.802,0.75,0.92,0.83
+palavras soltas,Híbrido CombSUM + correção,0.905,0.85,0.985,0.92
+artista + trecho,Híbrido CombSUM + correção,0.904,0.85,0.99,0.91

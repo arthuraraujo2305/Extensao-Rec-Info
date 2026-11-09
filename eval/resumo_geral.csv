@@ -1,0 +1,9 @@
+configuracao,MRR,sucesso@1,sucesso@10,ndcg@10
+Booleano (AND),0.61,0.561,0.698,0.624
+Booleano + correção,0.728,0.664,0.845,0.749
+TF-IDF,0.613,0.519,0.816,0.658
+BM25,0.847,0.804,0.934,0.864
+BM25 + correção,0.884,0.844,0.962,0.898
+Semântico,0.137,0.102,0.216,0.153
+Híbrido RRF + correção,0.477,0.336,0.859,0.562
+Híbrido CombSUM + correção,0.871,0.82,0.961,0.888
