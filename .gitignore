@@ -9,3 +9,6 @@ __pycache__/
 .streamlit/secrets.toml
 .vscode/
 .idea/
+
+# arquivos de anotação para organização individual de devs
+temp_notes_for_devs/
