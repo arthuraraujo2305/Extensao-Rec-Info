@@ -12,7 +12,7 @@ dependencies:
       - numpy
       - pandas
       - pyarrow
-      - streamlit>=1.36
+      - streamlit>=1.67
       - kagglehub
       - matplotlib
       - jupyterlab

@@ -13,16 +13,13 @@ import streamlit as st
 from buscador import config
 from buscador.avaliacao import avaliar_feedback
 from buscador.motor import MODOS, MODOS_SEMANTICOS, MotorDeBusca, RespostaBusca
+from interface.identidade import aplicar_estilo, cabecalho, favicon, icone_markdown, titulo_secao
+from interface.tema import seletor_tema
 
-st.set_page_config(page_title="Buscador de Letras", page_icon="🎵", layout="wide")
-
-st.markdown("""
-<style>
-mark { background: #ffd54f; color: #1a1a1a; padding: 0 3px; border-radius: 3px; }
-.res-titulo { font-size: 1.15rem; font-weight: 600; line-height: 1.3; }
-.res-artista { font-weight: 400; opacity: .75; }
-.trecho { font-size: .98rem; line-height: 1.6; margin: .2rem 0 .4rem; }
-</style>""", unsafe_allow_html=True)
+st.set_page_config(page_title="Buscador de Letras", page_icon=favicon(), layout="wide")
+aplicar_estilo()
+with st.sidebar:
+    seletor_tema()
 
 DESCRICOES = {
     "bm25": "Ranking probabilístico. Ótimo para trechos de letra, título e artista.",
@@ -31,7 +28,7 @@ DESCRICOES = {
     "semantico": "Busca pelo significado, mesmo sem palavras em comum (PT ↔ EN).",
     "hibrido": "Junta BM25 (70%) + semântico (30%). Bom para qualquer tipo de busca.",
 }
-IDIOMAS = {"pt": "🇧🇷 Português", "en": "🇺🇸 Inglês"}
+IDIOMAS = {"pt": "Português", "en": "Inglês"}
 EXEMPLOS = [
     ("eu sei que vou te amar", "bm25"),
     ("legião urbana tempo perdido", "bm25"),
@@ -60,7 +57,7 @@ def buscar(consulta: str, modo: str, k: int, idiomas: tuple, generos: tuple,
 
 
 if not MotorDeBusca.indice_existe():
-    st.title("🎵 Buscador de Letras")
+    cabecalho()
     st.error("O índice ainda não foi construído.")
     st.code("python scripts/baixar_dados.py\npython scripts/construir_indice.py", language="bash")
     st.stop()
@@ -76,10 +73,11 @@ def usar_exemplo(consulta: str, modo: str) -> None:
 
 
 def registrar_feedback(chave: str, resposta: RespostaBusca, posicao: int, link: str,
-                       titulo: str, artista: str) -> None:
-    valor = st.session_state.get(chave)
-    if valor is None:
+                       titulo: str, artista: str, valor: int) -> None:
+    if st.session_state.get(chave) == valor:
+        st.session_state[chave] = None
         return
+    st.session_state[chave] = valor
     linha = pd.DataFrame([{
         "data_hora": datetime.now().isoformat(timespec="seconds"),
         "consulta": resposta.consulta_usada, "consulta_digitada": resposta.consulta,
@@ -90,16 +88,17 @@ def registrar_feedback(chave: str, resposta: RespostaBusca, posicao: int, link: 
     caminho = config.ARQUIVO_FEEDBACK
     caminho.parent.mkdir(parents=True, exist_ok=True)
     linha.to_csv(caminho, mode="a", header=not caminho.exists(), index=False)
-    st.toast("Obrigado! Seu voto ajuda a avaliar o buscador. 🙌")
+    st.toast(f"{icone_markdown('confirmacao')} Obrigado! Seu voto ajuda a avaliar o buscador.")
 
 
 # ---------------------------------------------------------------------------- barra lateral
 with st.sidebar:
-    st.header("⚙️ Configurações")
+    titulo_secao(" Configurações", "configuracoes")
     modo = st.radio("Modelo de busca", modos_disponiveis, key="modo", format_func=MODOS.get,
                     captions=[DESCRICOES[m] for m in modos_disponiveis])
     if not motor.tem_semantico:
-        st.caption("ℹ️ Busca semântica desativada: gere os embeddings com `construir_indice.py`.")
+        st.info(f"{icone_markdown('informacao')} Busca semântica desativada: "
+                "gere os embeddings com `construir_indice.py`.")
 
     st.subheader("Filtros")
     idiomas = st.multiselect("Idioma", list(IDIOMAS), format_func=IDIOMAS.get, placeholder="Todos")
@@ -118,10 +117,12 @@ with st.sidebar:
 
 
 # ---------------------------------------------------------------------------- cabeçalho
-st.title("🎵 Buscador de Letras")
-st.markdown("Lembra só **um pedaço da letra**? Escreveu **errado**? Só sabe **do que a música fala**? "
-            "Busque em português ou inglês.")
-aba_busca, aba_avaliacao, aba_sobre = st.tabs(["🔎 Buscar", "📊 Avaliação", "ℹ️ Como funciona"])
+cabecalho()
+aba_busca, aba_avaliacao, aba_sobre = st.tabs([
+    f"{icone_markdown('buscar')} Buscar",
+    f"{icone_markdown('avaliacao')} Avaliação",
+    f"{icone_markdown('como-funciona')} Como funciona",
+])
 
 
 # ---------------------------------------------------------------------------- busca
@@ -146,29 +147,42 @@ def mostrar_resultado(r, resposta: RespostaBusca) -> None:
         with col_letra:
             with st.expander("Ver letra completa"):
                 st.text(r.letra)
-        with col_voto:
+        with col_voto, st.container(key=f"feedback_{r.doc_id}"):
             chave = f"voto|{resposta.modo}|{resposta.consulta_usada}|{r.doc_id}"
             st.caption("É o que você procurava?")
-            st.feedback("thumbs", key=chave, on_change=registrar_feedback,
-                        args=(chave, resposta, r.posicao, r.link, r.titulo, r.artista))
+            positivo, negativo = st.columns(2)
+            for coluna, valor, icone, rotulo in (
+                (positivo, 1, "voto-positivo", "Sim"),
+                (negativo, 0, "voto-negativo", "Não"),
+            ):
+                with coluna:
+                    st.button(
+                        f"{icone_markdown(icone)} {rotulo}", key=f"{chave}|{valor}",
+                        type="primary" if st.session_state.get(chave) == valor else "secondary",
+                        help="Marcar como relevante" if valor else "Marcar como não relevante",
+                        on_click=registrar_feedback,
+                        args=(chave, resposta, r.posicao, r.link, r.titulo, r.artista, valor),
+                        width="stretch",
+                    )
 
 
 with aba_busca:
     consulta = st.text_input("O que você procura?", key="consulta",
                              placeholder="ex.: eu sei que vou te amar · legião urbana tempo · "
                                          "música triste sobre saudade")
-    st.caption("Experimente:")
-    colunas = st.columns(3)
-    for i, (exemplo, modo_exemplo) in enumerate(EXEMPLOS):
-        colunas[i % 3].button(exemplo, key=f"ex{i}", on_click=usar_exemplo, args=(exemplo, modo_exemplo),
-                              width="stretch")
+    with st.container(key="exemplos"):
+        st.caption("Experimente uma pista:")
+        colunas = st.columns(3)
+        for i, (exemplo, modo_exemplo) in enumerate(EXEMPLOS):
+            colunas[i % 3].button(exemplo, key=f"ex{i}", on_click=usar_exemplo, args=(exemplo, modo_exemplo),
+                                  width="stretch")
 
     if consulta.strip():
         with st.spinner("Buscando…"):
             resposta = buscar(consulta, modo, k, tuple(idiomas), tuple(generos), corrigir,
                               reordenar and modo != "booleano", popularidade and modo != "booleano")
         if resposta.corrigida:
-            st.info(f"Mostrando resultados para **{resposta.consulta_usada}**. "
+            st.info(f"{icone_markdown('informacao')} Mostrando resultados para **{resposta.consulta_usada}**. "
                     f"(Desligue *Corrigir erros de digitação* para buscar exatamente “{consulta}”.)")
         if resposta.erro:
             st.warning(resposta.erro)
@@ -188,7 +202,7 @@ with aba_busca:
 
 # ---------------------------------------------------------------------------- avaliação
 with aba_avaliacao:
-    st.subheader("Comparação dos modelos")
+    titulo_secao(" Comparação dos modelos", "avaliacao", nivel=3)
     resumo_geral = config.PASTA_AVALIACAO / "resumo_geral.csv"
     resumo_tipo = config.PASTA_AVALIACAO / "resumo_por_tipo.csv"
     if resumo_geral.exists():
@@ -201,7 +215,7 @@ with aba_avaliacao:
         geral = pd.read_csv(resumo_geral, index_col=0)
         st.dataframe(geral.style.format("{:.3f}").highlight_max(axis=0, color="#2e7d3240"),
                      width="stretch")
-        st.bar_chart(geral["MRR"], horizontal=True, y_label="", x_label="MRR")
+        st.bar_chart(geral["MRR"], horizontal=True, y_label="", x_label="MRR", color="#7c3aed")
         if resumo_tipo.exists():
             st.markdown("**MRR por tipo de consulta**")
             por_tipo = pd.read_csv(resumo_tipo).pivot(index="configuracao", columns="tipo", values="MRR")
@@ -209,9 +223,9 @@ with aba_avaliacao:
             st.dataframe(por_tipo.style.format("{:.3f}").highlight_max(axis=0, color="#2e7d3240"),
                          width="stretch")
     else:
-        st.info("Ainda não há resultados. Rode `python scripts/avaliar.py`.")
+        st.info(f"{icone_markdown('informacao')} Ainda não há resultados. Rode `python scripts/avaliar.py`.")
 
-    st.subheader("Avaliação pelos usuários")
+    titulo_secao("Avaliação pelos usuários", "avaliacao", nivel=3)
     if config.ARQUIVO_FEEDBACK.exists():
         feedback = pd.read_csv(config.ARQUIVO_FEEDBACK)
         c1, c2, c3 = st.columns(3)
@@ -222,20 +236,20 @@ with aba_avaliacao:
             with st.spinner("Avaliando…"):
                 tabela = avaliar_feedback(motor, config.ARQUIVO_FEEDBACK)
             if tabela.empty:
-                st.info("Ainda não há votos positivos suficientes.")
+                st.info(f"{icone_markdown('informacao')} Ainda não há votos positivos suficientes.")
             else:
                 st.dataframe(tabela, width="stretch")
                 st.caption("Músicas não avaliadas contam como não relevantes (P@k é um limite inferior).")
     else:
-        st.info("Ninguém votou ainda. Use 👍/👎 nos resultados: os votos viram um conjunto de "
+        st.info(f"{icone_markdown('informacao')} Ninguém votou ainda. Responda ‘Sim’ ou ‘Não’ nos resultados: "
+                "os votos viram um conjunto de "
                 "julgamentos de relevância para avaliar os modelos com consultas reais.")
 
 
 # ---------------------------------------------------------------------------- sobre
 with aba_sobre:
+    titulo_secao(" Como o buscador funciona", "como-funciona", nivel=3)
     st.markdown("""
-### Como o buscador funciona
-
 | Etapa | O que faz | Conteúdo da disciplina | Código |
 |---|---|---|---|
 | Pré-processamento | minúsculas, sem acentos, tokenização | Aula 07 – Indexação | `buscador/texto.py` |

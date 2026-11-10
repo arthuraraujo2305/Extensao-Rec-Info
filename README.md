@@ -71,6 +71,8 @@ pasta (ex.: pelo Drive). Assim os outros só baixam e pulam o passo 3.
 
 ```
 app.py                     interface Streamlit (busca, avaliação, explicação)
+interface/                 identidade visual e componentes de apresentação
+static/                    marca, ícones e estilos servidos pelo Streamlit
 buscador/                  o motor de busca (um módulo por conteúdo da disciplina)
   motor.py                 junta tudo: modos, filtros, correção, reranking, trechos
   dados.py                 leitura da base e montagem do corpus
@@ -85,6 +87,36 @@ tests/                     testes com um corpus pequeno
 eval/                      resultados da avaliação (CSV)
 data/                      dados brutos e índices (fora do git)
 ```
+
+### Identidade visual
+
+Os arquivos visuais ficam em `static/brand/` (marca), `static/icons/` (ícones) e
+`static/styles/` (CSS). A pasta `static/` é servida pelo próprio Streamlit, com
+`server.enableStaticServing = true` em `.streamlit/config.toml`. Coloque nessa
+pasta somente arquivos públicos da interface.
+
+O PNG original da marca contém o logotipo com símbolo e o símbolo isolado.
+`interface/identidade.py` enquadra cada versão com SVG, preservando a arte:
+marca completa no cabeçalho, símbolo com nome em texto nas telas pequenas e
+símbolo isolado no favicon. Se a imagem original for substituída por outra
+composição, ajuste as janelas definidas nesse módulo.
+
+O roxo aparece na navegação, nos títulos e nos exemplos; o amarelo continua
+destacando as palavras encontradas. Na barra lateral, o controle **Tema escuro**
+alterna entre os dois temas sem perder a busca. A preferência fica no navegador,
+por aplicativo, e não muda o tema dos outros visitantes. Os textos e ícones roxos
+ficam mais claros no fundo escuro.
+
+As duas paletas estão em `.streamlit/config.toml`, usando os
+[temas nativos do Streamlit](https://docs.streamlit.io/develop/concepts/configuration/theming).
+`interface/tema.py` e `interface/tema.js` apresentam o controle na barra lateral
+e acionam os seletores do menu nativo. Essa integração foi testada com Streamlit
+1.67 e depende dos identificadores dos botões desse menu; ao atualizar o
+Streamlit, confira a troca por clique e teclado, persistência e preservação da
+consulta. Se os seletores mudarem, o controle orienta usar o menu original.
+
+Após mudar a configuração de temas ou arquivos estáticos, reinicie
+`streamlit run app.py`. A versão mínima do ambiente é Streamlit 1.67.
 
 ## Dados
 

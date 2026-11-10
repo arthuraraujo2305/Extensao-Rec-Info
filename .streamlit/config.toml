@@ -1,5 +1,29 @@
 [theme]
+base = "light"
 primaryColor = "#7c3aed"
+
+[theme.light]
+backgroundColor = "#ffffff"
+secondaryBackgroundColor = "#f5f3fa"
+textColor = "#262330"
+primaryColor = "#7c3aed"
+linkColor = "#6d28d9"
+borderColor = "#81738d"
+dataframeHeaderBackgroundColor = "#eee9f5"
+codeBackgroundColor = "#f5f3fa"
+
+[theme.dark]
+backgroundColor = "#17141f"
+secondaryBackgroundColor = "#24202e"
+textColor = "#f3effa"
+primaryColor = "#8541ee"
+linkColor = "#c4b5fd"
+borderColor = "#8f819d"
+dataframeHeaderBackgroundColor = "#312b3e"
+codeBackgroundColor = "#24202e"
+
+[server]
+enableStaticServing = true
 
 [browser]
 gatherUsageStats = false
