@@ -1,7 +1,4 @@
-"""Interface do buscador de letras.
-
-    streamlit run app.py
-"""
+"""Busca de músicas e percurso explorável para a feira de extensão."""
 from __future__ import annotations
 
 import html
@@ -11,273 +8,185 @@ import pandas as pd
 import streamlit as st
 
 from buscador import config
-from buscador.avaliacao import avaliar_feedback
-from buscador.motor import MODOS, MODOS_SEMANTICOS, MotorDeBusca, RespostaBusca
+from buscador.motor import MotorDeBusca
+from interface import estado
 from interface.identidade import aplicar_estilo, cabecalho, favicon, icone_markdown, titulo_secao
+from interface.percurso import mostrar_percurso
 from interface.tema import seletor_tema
 
 st.set_page_config(page_title="Buscador de Letras", page_icon=favicon(), layout="wide")
 aplicar_estilo()
-with st.sidebar:
+marca, aparencia = st.columns([4, 1])
+with marca:
+    cabecalho()
+with aparencia:
     seletor_tema()
+    st.button("Começar outra busca", on_click=estado.reiniciar, width="stretch")
 
-DESCRICOES = {
-    "bm25": "Ranking probabilístico. Ótimo para trechos de letra, título e artista.",
-    "tfidf": "Modelo vetorial clássico (cosseno). Para comparar com o BM25.",
-    "booleano": "Use AND, OR, NOT, \"frases\", artista:, titulo:, curinga*.",
-    "semantico": "Busca pelo significado, mesmo sem palavras em comum (PT ↔ EN).",
-    "hibrido": "Junta BM25 (70%) + semântico (30%). Bom para qualquer tipo de busca.",
-}
 IDIOMAS = {"pt": "Português", "en": "Inglês"}
-EXEMPLOS = [
-    ("eu sei que vou te amar", "bm25"),
-    ("legião urbana tempo perdido", "bm25"),
-    ("imagin all the peple", "bm25"),
-    ("música triste sobre saudade de casa", "semantico"),
-    ("song about a broken heart", "hibrido"),
-    ('artista:"legião urbana" AND (chuva OR sol)', "booleano"),
-]
+INTENCOES = {"palavras": "Lembro algumas palavras", "assunto": "Lembro do assunto"}
+EXEMPLOS = {
+    "palavras": ["eu sei que vou te amar", "legião urbana temmpo perdido", "when I find myself in times of trouble"],
+    "assunto": ["saudade de casa e vontade de voltar", "uma despedida de um grande amor", "seguir em frente apesar das dificuldades"],
+}
 
 
-# ---------------------------------------------------------------------------- carga
-@st.cache_resource(show_spinner="Carregando índices e modelos…")
-def carregar_motor() -> MotorDeBusca:
+@st.cache_resource(show_spinner="Preparando a coleção de letras…")
+def carregar_motor():
     motor = MotorDeBusca.carregar()
-    if motor.tem_semantico:
-        motor.semantico.vetor_consulta("aquecimento")  # carrega o modelo já na abertura do app
     _ = motor.corretor
+    if motor.tem_semantico:
+        try:
+            motor.semantico.vetor_consulta("aquecimento")
+        except (OSError, RuntimeError, ValueError):
+            # A busca por palavras permanece disponível se o modelo local não carregar.
+            motor.semantico = None
     return motor
 
 
-@st.cache_data(max_entries=300, show_spinner=False)
-def buscar(consulta: str, modo: str, k: int, idiomas: tuple, generos: tuple,
-           corrigir: bool, reordenar: bool, popularidade: bool) -> RespostaBusca:
-    return carregar_motor().buscar(consulta, modo=modo, k=k, idiomas=idiomas, generos=generos,
-                                   corrigir=corrigir, reordenar=reordenar, usar_popularidade=popularidade)
+@st.cache_data(max_entries=128, show_spinner=False)
+def buscar(consulta, intencao, idiomas, generos):
+    modo = "bm25" if intencao == "palavras" else "semantico"
+    return carregar_motor().buscar(consulta, modo=modo, k=20, idiomas=idiomas,
+                                  generos=generos, corrigir=intencao == "palavras")
 
 
-if not MotorDeBusca.indice_existe():
-    cabecalho()
-    st.error("O índice ainda não foi construído.")
-    st.code("python scripts/baixar_dados.py\npython scripts/construir_indice.py", language="bash")
-    st.stop()
-
-motor = carregar_motor()
-modos_disponiveis = [m for m in MODOS if motor.tem_semantico or m not in MODOS_SEMANTICOS]
-
-
-# ---------------------------------------------------------------------------- callbacks
-def usar_exemplo(consulta: str, modo: str) -> None:
-    st.session_state["consulta"] = consulta
-    st.session_state["modo"] = modo if modo in modos_disponiveis else "bm25"
-
-
-def registrar_feedback(chave: str, resposta: RespostaBusca, posicao: int, link: str,
-                       titulo: str, artista: str, valor: int) -> None:
+def registrar_feedback(chave, resposta, resultado, valor):
     if st.session_state.get(chave) == valor:
         st.session_state[chave] = None
         return
     st.session_state[chave] = valor
-    linha = pd.DataFrame([{
-        "data_hora": datetime.now().isoformat(timespec="seconds"),
-        "consulta": resposta.consulta_usada, "consulta_digitada": resposta.consulta,
-        "modo": resposta.modo, "posicao": posicao,
-        "link_musica": link.removeprefix(config.URL_VAGALUME),
-        "titulo": titulo, "artista": artista, "relevante": int(valor),
-    }])
     caminho = config.ARQUIVO_FEEDBACK
     caminho.parent.mkdir(parents=True, exist_ok=True)
-    linha.to_csv(caminho, mode="a", header=not caminho.exists(), index=False)
-    st.toast(f"{icone_markdown('confirmacao')} Obrigado! Seu voto ajuda a avaliar o buscador.")
+    pd.DataFrame([{
+        "data_hora": datetime.now().isoformat(timespec="seconds"),
+        "consulta": resposta.consulta_usada, "consulta_digitada": resposta.consulta,
+        "modo": resposta.modo, "posicao": resultado.posicao,
+        "link_musica": resultado.link.removeprefix(config.URL_VAGALUME),
+        "titulo": resultado.titulo, "artista": resultado.artista, "relevante": valor,
+    }]).to_csv(caminho, mode="a", header=not caminho.exists(), index=False)
+    st.toast(f"{icone_markdown('confirmacao')} Obrigado! Sua resposta ajuda a melhorar o buscador.")
 
 
-# ---------------------------------------------------------------------------- barra lateral
-with st.sidebar:
-    titulo_secao(" Configurações", "configuracoes")
-    modo = st.radio("Modelo de busca", modos_disponiveis, key="modo", format_func=MODOS.get,
-                    captions=[DESCRICOES[m] for m in modos_disponiveis])
-    if not motor.tem_semantico:
-        st.info(f"{icone_markdown('informacao')} Busca semântica desativada: "
-                "gere os embeddings com `construir_indice.py`.")
-
-    st.subheader("Filtros")
-    idiomas = st.multiselect("Idioma", list(IDIOMAS), format_func=IDIOMAS.get, placeholder="Todos")
-    generos = st.multiselect("Gênero", motor.generos_disponiveis(minimo=30), placeholder="Todos")
-
-    st.subheader("Opções")
-    corrigir = st.toggle("Corrigir erros de digitação", value=True)
-    popularidade = st.toggle("Priorizar artistas populares", value=False, disabled=modo == "booleano")
-    reordenar = st.toggle("Reranking com cross-encoder", value=False, disabled=modo == "booleano",
-                          help="Reordena os 30 primeiros com um modelo mais preciso (~1 s por busca). "
-                               "Na primeira vez baixa o modelo (~470 MB) e pode levar um minuto.")
-    k = st.slider("Número de resultados", 5, 30, 10, step=5)
-    st.divider()
-    st.caption(f"Corpus: {motor.n_docs:,} músicas · {motor.corpus['artista'].nunique():,} artistas · "
-               "letras do Vagalume (Kaggle)".replace(",", "."))
-
-
-# ---------------------------------------------------------------------------- cabeçalho
-cabecalho()
-aba_busca, aba_avaliacao, aba_sobre = st.tabs([
-    f"{icone_markdown('buscar')} Buscar",
-    f"{icone_markdown('avaliacao')} Avaliação",
-    f"{icone_markdown('como-funciona')} Como funciona",
-])
-
-
-# ---------------------------------------------------------------------------- busca
-def mostrar_resultado(r, resposta: RespostaBusca) -> None:
+def mostrar_resultado(resultado, resposta, investigar=True):
     with st.container(border=True):
-        col_info, col_link = st.columns([6, 1])
-        with col_info:
-            st.markdown(f"<div class='res-titulo'>{r.posicao}. {html.escape(r.titulo)} "
-                        f"<span class='res-artista'>— {html.escape(r.artista)}</span></div>",
-                        unsafe_allow_html=True)
-            detalhes = [IDIOMAS.get(r.idioma, r.idioma)]
-            if r.generos:
-                detalhes.append(r.generos.replace(";", ","))
-            if resposta.modo != "booleano":
-                detalhes.append(f"nota {r.score:.3f}")
-            st.caption(" · ".join(detalhes))
-        with col_link:
-            st.link_button("Vagalume ↗", r.link, width="stretch")
-        if r.trecho_html:
-            st.markdown(f"<div class='trecho'>{r.trecho_html}</div>", unsafe_allow_html=True)
-        col_letra, col_voto = st.columns([5, 2])
-        with col_letra:
-            with st.expander("Ver letra completa"):
-                st.text(r.letra)
-        with col_voto, st.container(key=f"feedback_{r.doc_id}"):
-            chave = f"voto|{resposta.modo}|{resposta.consulta_usada}|{r.doc_id}"
-            st.caption("É o que você procurava?")
-            positivo, negativo = st.columns(2)
-            for coluna, valor, icone, rotulo in (
-                (positivo, 1, "voto-positivo", "Sim"),
-                (negativo, 0, "voto-negativo", "Não"),
-            ):
-                with coluna:
-                    st.button(
-                        f"{icone_markdown(icone)} {rotulo}", key=f"{chave}|{valor}",
-                        type="primary" if st.session_state.get(chave) == valor else "secondary",
-                        help="Marcar como relevante" if valor else "Marcar como não relevante",
-                        on_click=registrar_feedback,
-                        args=(chave, resposta, r.posicao, r.link, r.titulo, r.artista, valor),
-                        width="stretch",
-                    )
-
-
-with aba_busca:
-    consulta = st.text_input("O que você procura?", key="consulta",
-                             placeholder="ex.: eu sei que vou te amar · legião urbana tempo · "
-                                         "música triste sobre saudade")
-    with st.container(key="exemplos"):
-        st.caption("Experimente uma pista:")
-        colunas = st.columns(3)
-        for i, (exemplo, modo_exemplo) in enumerate(EXEMPLOS):
-            colunas[i % 3].button(exemplo, key=f"ex{i}", on_click=usar_exemplo, args=(exemplo, modo_exemplo),
-                                  width="stretch")
-
-    if consulta.strip():
-        with st.spinner("Buscando…"):
-            resposta = buscar(consulta, modo, k, tuple(idiomas), tuple(generos), corrigir,
-                              reordenar and modo != "booleano", popularidade and modo != "booleano")
-        if resposta.corrigida:
-            st.info(f"{icone_markdown('informacao')} Mostrando resultados para **{resposta.consulta_usada}**. "
-                    f"(Desligue *Corrigir erros de digitação* para buscar exatamente “{consulta}”.)")
-        if resposta.erro:
-            st.warning(resposta.erro)
-        elif not resposta.resultados:
-            st.warning("Nenhuma música encontrada. Tente outras palavras, outro modelo ou remova os filtros.")
-        else:
-            if resposta.total is not None:
-                resumo = f"{resposta.total:,} músicas encontradas".replace(",", ".")
-                if modo == "booleano":
-                    resumo += " · o modelo booleano não ranqueia: ordenadas por popularidade do artista"
-            else:
-                resumo = f"{len(resposta.resultados)} músicas mais parecidas"
-            st.caption(f"{resumo} · {resposta.tempo_ms:.0f} ms · {MODOS[modo]}")
-            for resultado in resposta.resultados:
-                mostrar_resultado(resultado, resposta)
-
-
-# ---------------------------------------------------------------------------- avaliação
-with aba_avaliacao:
-    titulo_secao(" Comparação dos modelos", "avaliacao", nivel=3)
-    resumo_geral = config.PASTA_AVALIACAO / "resumo_geral.csv"
-    resumo_tipo = config.PASTA_AVALIACAO / "resumo_por_tipo.csv"
-    if resumo_geral.exists():
         st.markdown(
-            "Avaliação automática por **item conhecido**: sorteamos músicas, pegamos um pedaço da letra e "
-            "simulamos como alguém buscaria por ela. A música de origem é a resposta certa.\n\n"
-            "- **MRR**: média de 1/posição da música certa (1 = sempre em 1º lugar)\n"
-            "- **Sucesso@k**: fração das buscas com a música certa entre os k primeiros\n"
-            "- **nDCG@10**: qualidade do ranking, valorizando acertos nas primeiras posições")
-        geral = pd.read_csv(resumo_geral, index_col=0)
-        st.dataframe(geral.style.format("{:.3f}").highlight_max(axis=0, color="#2e7d3240"),
-                     width="stretch")
-        st.bar_chart(geral["MRR"], horizontal=True, y_label="", x_label="MRR", color="#7c3aed")
-        if resumo_tipo.exists():
-            st.markdown("**MRR por tipo de consulta**")
-            por_tipo = pd.read_csv(resumo_tipo).pivot(index="configuracao", columns="tipo", values="MRR")
-            por_tipo = por_tipo.reindex(geral.index)
-            st.dataframe(por_tipo.style.format("{:.3f}").highlight_max(axis=0, color="#2e7d3240"),
-                         width="stretch")
-    else:
-        st.info(f"{icone_markdown('informacao')} Ainda não há resultados. Rode `python scripts/avaliar.py`.")
-
-    titulo_secao("Avaliação pelos usuários", "avaliacao", nivel=3)
-    if config.ARQUIVO_FEEDBACK.exists():
-        feedback = pd.read_csv(config.ARQUIVO_FEEDBACK)
-        c1, c2, c3 = st.columns(3)
-        c1.metric("Votos", len(feedback))
-        c2.metric("Consultas avaliadas", feedback["consulta"].nunique())
-        c3.metric("Votos positivos", f"{feedback['relevante'].mean():.0%}")
-        if st.button("Calcular métricas com os votos"):
-            with st.spinner("Avaliando…"):
-                tabela = avaliar_feedback(motor, config.ARQUIVO_FEEDBACK)
-            if tabela.empty:
-                st.info(f"{icone_markdown('informacao')} Ainda não há votos positivos suficientes.")
-            else:
-                st.dataframe(tabela, width="stretch")
-                st.caption("Músicas não avaliadas contam como não relevantes (P@k é um limite inferior).")
-    else:
-        st.info(f"{icone_markdown('informacao')} Ninguém votou ainda. Responda ‘Sim’ ou ‘Não’ nos resultados: "
-                "os votos viram um conjunto de "
-                "julgamentos de relevância para avaliar os modelos com consultas reais.")
+            f"<div class='res-titulo'>{html.escape(resultado.titulo)} "
+            f"<span class='res-artista'>— {html.escape(resultado.artista)}</span></div>",
+            unsafe_allow_html=True)
+        st.caption(IDIOMAS.get(resultado.idioma, resultado.idioma))
+        if resultado.trecho_html:
+            st.markdown(f"<div class='trecho'>{resultado.trecho_html}</div>", unsafe_allow_html=True)
+        with st.expander("Ver letra completa"):
+            st.text(resultado.letra)
+            st.link_button("Abrir no Vagalume", resultado.link)
+        if investigar:
+            st.button(f"{icone_markdown('como-funciona')} Como esta música apareceu?",
+                      key=f"abrir_{resultado.doc_id}", on_click=estado.abrir_percurso,
+                      args=(resultado.doc_id,), width="stretch")
+        with st.container(key=f"feedback_{resultado.doc_id}"):
+            st.caption("É o que você procurava?")
+            chave = f"voto|{resposta.modo}|{resposta.consulta_usada}|{resultado.doc_id}"
+            colunas = st.columns(2)
+            for coluna, valor, icone, rotulo in zip(colunas, (1, 0),
+                                                   ("voto-positivo", "voto-negativo"), ("Sim", "Não")):
+                with coluna:
+                    st.button(f"{icone_markdown(icone)} {rotulo}", key=f"{chave}|{valor}",
+                              type="primary" if st.session_state.get(chave) == valor else "secondary",
+                              on_click=registrar_feedback, args=(chave, resposta, resultado, valor),
+                              width="stretch")
 
 
-# ---------------------------------------------------------------------------- sobre
-with aba_sobre:
-    titulo_secao(" Como o buscador funciona", "como-funciona", nivel=3)
-    st.markdown("""
-| Etapa | O que faz | Conteúdo da disciplina | Código |
-|---|---|---|---|
-| Pré-processamento | minúsculas, sem acentos, tokenização | Aula 07 – Indexação | `buscador/texto.py` |
-| Índice invertido | termo → lista de músicas (postings) e frequências, para letra, título e artista | Aula 07 – Indexação | `buscador/indice.py` |
-| Booleano | AND / OR / NOT, frases, campos, parênteses | Aula 02 – Modelo booleano | `buscador/booleano.py` |
-| BM25 | ranking probabilístico com saturação de tf e normalização por tamanho | Aula 03 – Modelo probabilístico | `buscador/bm25.py` |
-| TF-IDF | vetores de pesos + similaridade do cosseno | Aula 04 – Modelo vetorial | `buscador/vetorial.py` |
-| Tolerância a erros | distância de edição, índice de bigramas, correção sensível ao contexto, curingas | Aula 08 – Dicionários e tolerância | `buscador/tolerancia.py` |
-| Semântico | embeddings multilíngues dos trechos das letras | Aulas 09 e 10 – Recuperação semântica | `buscador/semantico.py` |
-| Híbrido e reranking | fusão das notas do BM25 e do semântico (CombSUM, comparada com RRF) e cross-encoder | Aula 11 – Busca híbrida e reranking | `buscador/hibrido.py` |
-| Popularidade | relevância + "autoridade" do artista | Aula 12 – Busca na Web | `buscador/motor.py` |
-| Avaliação | MRR, Sucesso@k, nDCG, P@k, MAP | Aula 05 – Avaliação de RI | `buscador/avaliacao.py` |
+def mostrar_exemplos(intencao, sufixo="inicio"):
+    st.caption("Escolha uma pista para experimentar. O exemplo começa sem filtros.")
+    with st.container(key=f"exemplos_{sufixo}"):
+        colunas = st.columns(3)
+        for i, exemplo in enumerate(EXEMPLOS[intencao]):
+            colunas[i].button(exemplo, key=f"ex_{sufixo}_{i}", on_click=estado.usar_exemplo,
+                              args=(exemplo,), width="stretch")
 
-### Sintaxe da busca booleana
 
-| Exemplo | Significado |
-|---|---|
-| `chuva saudade` ou `chuva AND saudade` | as duas palavras (também vale `E`) |
-| `amor OR paixão` | qualquer uma das duas (também vale `OU`) |
-| `amor NOT traição` ou `amor -traição` | sem a palavra (também vale `NÃO`) |
-| `"eu sei que vou te amar"` | frase exata |
-| `artista:"legião urbana"` · `titulo:chuva` · `letra:mar` | só naquele campo |
-| `apaixon*` | curinga: apaixonado, apaixonada, apaixonei… |
-| `(chuva OR sol) AND verão` | parênteses para agrupar |
+def apoio(intencao):
+    st.info("Nossa coleção não reúne todas as músicas. Você pode dar outra pista ou experimentar um exemplo. "
+            "Às vezes, os resultados também não correspondem à lembrança que você tem.")
+    st.button("Vou dar outra pista", key="outra_pista", on_click=estado.voltar_resultados)
+    st.caption("Edite o campo de busca acima e tente incluir um trecho ou o nome do artista, "
+               "ou descreva o assunto com mais detalhes.")
+    if st.toggle("Quero experimentar um exemplo", key="mostrar_exemplos_apoio"):
+        mostrar_exemplos(intencao, "apoio")
 
-Os campos (`artista:`, `titulo:`) também funcionam nos modos ranqueados: `artista:queen love`.
 
----
-Projeto de extensão da disciplina de Recuperação da Informação.
-As letras pertencem aos seus autores e vêm da base pública do Vagalume no Kaggle.
-""")
+if not MotorDeBusca.indice_existe():
+    st.error("A coleção de letras ainda não está pronta neste computador.")
+    with st.expander("Orientações para a equipe do estande"):
+        st.code("python scripts/baixar_dados.py\npython scripts/construir_indice.py", language="bash")
+    st.stop()
+
+motor = carregar_motor()
+intencao = st.radio("Como você se lembra da música?", list(INTENCOES), key="intencao",
+                    format_func=INTENCOES.get, horizontal=True,
+                    captions=["Um trecho da letra, o título ou o artista.", "Descreva o tema, mesmo sem lembrar a letra."],
+                    on_change=estado.mudar_intencao)
+indisponivel = intencao == "assunto" and not motor.tem_semantico
+if indisponivel:
+    st.info("A busca pelo assunto está indisponível neste computador. "
+            "Você pode continuar escolhendo ‘Lembro algumas palavras’.")
+
+with st.form("busca"):
+    st.text_input("O que você lembra?", key="consulta", max_chars=300,
+                  placeholder="Um pedaço da letra, um artista…" if intencao == "palavras"
+                  else "Ex.: saudade de casa e vontade de voltar")
+    # O primeiro submit do formulário é acionado pelo Enter.
+    st.form_submit_button("Buscar música", type="primary", on_click=estado.iniciar_busca,
+                           disabled=indisponivel, width="stretch")
+    with st.expander("Refinar busca"):
+        st.multiselect("Idioma", list(IDIOMAS), key="idiomas", format_func=IDIOMAS.get, placeholder="Todos")
+        st.multiselect("Gênero", motor.generos_disponiveis(), key="generos", placeholder="Todos",
+                       help="São os gêneros cadastrados para o artista; uma música pode ter outro estilo.")
+        st.form_submit_button("Limpar filtros", on_click=estado.limpar_filtros)
+
+pedido = st.session_state.get("pedido")
+if not pedido:
+    if not indisponivel:
+        mostrar_exemplos(intencao)
+    st.caption(f"Uma coleção de {motor.n_docs:,} músicas em português e inglês. "
+               "Escolha uma pista, encontre músicas e descubra como a busca funciona.".replace(",", "."))
+    st.stop()
+
+consulta, intencao_pedido, idiomas, generos = pedido
+if not consulta:
+    st.info("Escreva uma pista ou escolha um dos exemplos para começar.")
+    if not indisponivel:
+        mostrar_exemplos(intencao)
+    st.stop()
+if indisponivel:
+    st.stop()
+with st.spinner("Procurando músicas para sua pista…"):
+    resposta = buscar(*pedido)
+if idiomas or generos:
+    st.caption("Filtros desta busca: " + " · ".join([IDIOMAS[i] for i in idiomas] + list(generos)))
+if resposta.corrigida:
+    st.info(f"{icone_markdown('informacao')} Ajustamos a pista para: **{resposta.consulta_usada}**. "
+            "Você poderá ver essa transformação no percurso.")
+if resposta.erro or not resposta.resultados:
+    st.write("Ainda não encontramos uma música para essa pista.")
+    apoio(intencao_pedido)
+    st.stop()
+
+investigar = st.session_state.get("investigar")
+selecionado = next((r for r in resposta.resultados if r.doc_id == investigar), None)
+if selecionado:
+    st.button("Voltar aos resultados", on_click=estado.voltar_resultados)
+    st.caption(f"Sua busca: {resposta.consulta} · {INTENCOES[intencao_pedido]}")
+    mostrar_resultado(selecionado, resposta, investigar=False)
+    mostrar_percurso(motor, resposta, selecionado, idiomas, generos)
+else:
+    titulo_secao("Músicas para sua pista", "buscar")
+    st.caption(f"Sua busca: {resposta.consulta}")
+    n = st.session_state.get("quantidade", 5)
+    for resultado in resposta.resultados[:n]:
+        mostrar_resultado(resultado, resposta)
+    if n < len(resposta.resultados):
+        st.button("Ver mais músicas", on_click=estado.mais_resultados, width="stretch")
+    with st.expander("Não encontrou a música?"):
+        apoio(intencao_pedido)

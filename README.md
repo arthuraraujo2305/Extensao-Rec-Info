@@ -88,6 +88,44 @@ eval/                      resultados da avaliação (CSV)
 data/                      dados brutos e índices (fora do git)
 ```
 
+### Experiência da feira
+
+Para revisão por outro integrante, preparação do estande e piloto com visitantes,
+use o [roteiro de revisão da experiência](docs/revisao_experiencia_feira.md).
+
+A interface pública oferece **Lembro algumas palavras** (BM25 com correção) e
+**Lembro do assunto** (semântico, preservando a descrição). Idioma e gênero
+ficam em **Refinar busca**. Os resultados aparecem em grupos de cinco, até vinte.
+
+Em cada música, **Como esta música apareceu?** abre o percurso **Sua pista →
+Onde procuramos → Por que apareceu?**. As listas do índice, os pesos por palavra
+e os trechos semânticos vêm dos mesmos dados e cálculos usados na recuperação.
+Os aprofundamentos explicam o modelo e suas limitações; notas são sinais de
+ordenação, não porcentagens de certeza.
+
+No percurso por palavras, **Experimentar uma busca com regras** abre a oficina
+booleana. Os campos **Todas**, **Pelo menos uma** e **Nenhuma** geram uma expressão
+com AND, OR e NOT. As palavras são normalizadas e tratadas como literais, sem
+exigir sintaxe do visitante. A primeira regra usa os termos efetivos da busca;
+novas regras não recebem outra correção ortográfica automática.
+
+**Começar outra busca** limpa a visita e preserva o tema e os votos já salvos.
+Se a pessoa não reconhecer nenhuma música, **Não encontrou a música?** oferece
+outra pista ou exemplos. Os exemplos começam sem filtros; os exemplos por tema
+são sugestões plausíveis, não respostas únicas garantidas.
+
+As referências às aulas e os relatórios de avaliação permanecem neste README,
+nos notebooks e em `eval/`; a interface da feira concentra-se na exploração.
+Os módulos TF-IDF, híbrido, reranking e avaliação continuam disponíveis em Python.
+
+Antes da feira, prepare os índices e os modelos e abra o app uma vez para
+aquecer a busca. Teste o funcionamento sem rede. Se o modelo semântico não
+carregar, a interface informa a indisponibilidade e mantém a busca por palavras.
+Os links externos para o Vagalume precisam de internet.
+
+Os testes de interface usam uma coleção pequena e representações semânticas
+controladas, sem baixar modelos: `python -m pytest -q`.
+
 ### Identidade visual
 
 Os arquivos visuais ficam em `static/brand/` (marca), `static/icons/` (ícones) e
@@ -102,14 +140,14 @@ símbolo isolado no favicon. Se a imagem original for substituída por outra
 composição, ajuste as janelas definidas nesse módulo.
 
 O roxo aparece na navegação, nos títulos e nos exemplos; o amarelo continua
-destacando as palavras encontradas. Na barra lateral, o controle **Tema escuro**
+destacando as palavras encontradas. No cabeçalho, o controle **Tema escuro**
 alterna entre os dois temas sem perder a busca. A preferência fica no navegador,
 por aplicativo, e não muda o tema dos outros visitantes. Os textos e ícones roxos
 ficam mais claros no fundo escuro.
 
 As duas paletas estão em `.streamlit/config.toml`, usando os
 [temas nativos do Streamlit](https://docs.streamlit.io/develop/concepts/configuration/theming).
-`interface/tema.py` e `interface/tema.js` apresentam o controle na barra lateral
+`interface/tema.py` e `interface/tema.js` apresentam o controle no cabeçalho
 e acionam os seletores do menu nativo. Essa integração foi testada com Streamlit
 1.67 e depende dos identificadores dos botões desse menu; ao atualizar o
 Streamlit, confira a troca por clique e teclado, persistência e preservação da

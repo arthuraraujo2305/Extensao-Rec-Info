@@ -355,17 +355,18 @@ class MotorDeBusca:
         except ErroConsulta as e:
             ranking, total, erro = [], 0, str(e)
         termos = set(termos_da_consulta(usada))
-        resultados = [self._montar_resultado(pos, d, s, termos, usada)
+        resultados = [self._montar_resultado(pos, d, s, termos, usada,
+                                             preferir_semantico=modo in MODOS_SEMANTICOS)
                       for pos, (d, s) in enumerate(ranking, start=1)]
         return RespostaBusca(consulta, usada, modo, resultados, total,
                              (time.perf_counter() - inicio) * 1000, corrigida, erro)
 
     def _montar_resultado(self, posicao: int, doc: int, score: float, termos: set[str],
-                          consulta: str) -> Resultado:
+                          consulta: str, preferir_semantico: bool = False) -> Resultado:
         linha = self.corpus.iloc[doc]
         letra = self.textos["letra"][doc]
         trecho, acertos = gerar_trecho_html(letra, termos, largura=32)
-        if acertos == 0 and self.semantico is not None:
+        if (preferir_semantico or acertos == 0) and self.semantico is not None:
             # nenhuma palavra em comum: mostra o trecho mais parecido segundo os embeddings
             trechos = dividir_em_trechos(letra)
             if trechos:

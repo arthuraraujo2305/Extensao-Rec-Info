@@ -67,10 +67,10 @@ def cabecalho() -> None:
     simbolo = _svg(MARCA, JANELA_SIMBOLO, (1774, 887))
     st.markdown(
         '<header class="marca-cabecalho">'
-        '<h1><span class="marca-extensa" aria-hidden="true">' + marca + '</span>'
+        '<div class="marca-titulo" role="heading" aria-level="1"><span class="marca-extensa" aria-hidden="true">' + marca + '</span>'
         '<span class="marca-compacta" aria-hidden="true">' + simbolo +
         '<span>Buscador<br>de Letras</span></span>'
-        '<span class="somente-leitor">Buscador de Letras</span></h1>'
+        '<span class="somente-leitor">Buscador de Letras</span></div>'
         '<p>Lembra só <strong>um pedaço da letra</strong>? Escreveu <strong>errado</strong>? '
         'Só sabe <strong>do que a música fala</strong>?<br>'
         'Busque em português ou inglês e reencontre aquela música.</p></header>',

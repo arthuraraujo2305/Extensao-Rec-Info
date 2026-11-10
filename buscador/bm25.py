@@ -37,7 +37,28 @@ class BM25:
             tid = self.indice.vocabulario.get(termo)
             if tid is None:
                 continue
-            docs, tf = self.indice.postings_por_id(tid)
-            tf = tf.astype(np.float32)
-            scores[docs] += self.idf[tid] * tf * (self.k1 + 1) / (tf + self._norma_doc[docs])
+            docs, valores = self._contribuicoes(tid)
+            scores[docs] += valores
         return scores
+
+    def _contribuicoes(self, tid: int) -> tuple[np.ndarray, np.ndarray]:
+        docs, tf = self.indice.postings_por_id(tid)
+        tf = tf.astype(np.float32)
+        return docs, self.idf[tid] * tf * (self.k1 + 1) / (tf + self._norma_doc[docs])
+
+    def explicar(self, termos: Iterable[str], doc: int) -> list[dict]:
+        """Decompõe a nota usando exatamente o cálculo empregado no ranking."""
+        linhas = []
+        for termo in dict.fromkeys(termos):
+            tid = self.indice.vocabulario.get(termo)
+            df, tf, idf, contribuicao = 0, 0, 0.0, 0.0
+            if tid is not None:
+                docs, valores = self._contribuicoes(tid)
+                df, idf = len(docs), float(self.idf[tid])
+                pos = int(np.searchsorted(docs, doc))
+                if pos < len(docs) and docs[pos] == doc:
+                    tf = int(self.indice.postings_por_id(tid)[1][pos])
+                    contribuicao = float(valores[pos])
+            linhas.append(dict(termo=termo, musicas=df, ocorrencias=tf,
+                               raridade=idf, contribuicao=contribuicao))
+        return linhas
